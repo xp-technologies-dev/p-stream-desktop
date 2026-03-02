@@ -844,6 +844,11 @@ function createWindow() {
             restoreSubtitles();
           }
         });
+
+        // If already in fullscreen when this script runs (e.g. inject fired after the
+        // fullscreenchange event), apply the fix immediately without waiting for an event.
+        const currentFs = document.fullscreenElement || document.webkitFullscreenElement;
+        if (currentFs) moveSubtitlesIntoFullscreen(currentFs);
       })();
     `;
     view.webContents.executeJavaScript(script).catch(console.error);
@@ -860,7 +865,8 @@ function createWindow() {
   view.webContents.on('did-navigate', () => {
     setTimeout(injectMediaWatcher, 1000);
     setTimeout(injectDevToolsShortcut, 100);
-    setTimeout(injectSubtitleFullscreenFix, 200);
+    // No delay — the script is idempotent and must run before any fullscreenchange fires.
+    injectSubtitleFullscreenFix();
   });
 
   // Update title when page title changes
