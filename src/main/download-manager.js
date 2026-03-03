@@ -1,4 +1,4 @@
-/* global console, module, require */
+/* global console, module, require, URL, Buffer */
 const fs = require('fs');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
@@ -93,8 +93,15 @@ function validateVideoData(videoData) {
     }
   }
 
-  if (videoData.duration !== undefined && (typeof videoData.duration !== 'number' || !Number.isFinite(videoData.duration))) {
+  if (
+    videoData.duration !== undefined &&
+    (typeof videoData.duration !== 'number' || !Number.isFinite(videoData.duration))
+  ) {
     videoData.duration = undefined;
+  }
+
+  if (videoData.headers !== undefined && typeof videoData.headers !== 'object') {
+    throw new Error('Invalid download request.');
   }
 }
 
@@ -129,8 +136,26 @@ function startDownload(videoData, webContents) {
   downloads.unshift(downloadEntry); // Add to beginning
   saveManifest();
 
-  // Need user agent or headers if stream blocks default ffmpeg
-  const inputOptions = ['-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'];
+  // Modern User-Agent for better compatibility
+  const userAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+  const inputOptions = ['-user_agent', userAgent];
+
+  // Only add custom headers if provided by the web app
+  // Avoid automatic Referer as it can cause "Invalid argument" errors with some ffmpeg versions
+  if (videoData.headers && typeof videoData.headers === 'object') {
+    let headersString = '';
+    Object.entries(videoData.headers).forEach(([key, value]) => {
+      if (key && value) {
+        headersString += `${key}: ${value}\r\n`;
+      }
+    });
+
+    if (headersString) {
+      inputOptions.push('-headers', headersString);
+    }
+  }
 
   const outputOptions = ['-c copy'];
   if (videoData.url.includes('.m3u8') || videoData.url.includes('m3u8-proxy') || videoData.type === 'hls') {

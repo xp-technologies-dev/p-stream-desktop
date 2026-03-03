@@ -1,14 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Channels safe to invoke from any origin (non-sensitive read-only / navigation)
-const PUBLIC_CHANNELS = [
-  'hello',
-  'makeRequest',
-  'prepareStream',
-  'openPage',
-  'updateMediaMetadata',
-  'openOfflineApp',
-];
+const PUBLIC_CHANNELS = ['hello', 'makeRequest', 'prepareStream', 'openPage', 'updateMediaMetadata', 'openOfflineApp'];
 
 // Channels that should only be invoked from trusted (local file://) pages
 const PRIVILEGED_CHANNELS = ['startDownload', 'getDownloads', 'deleteDownload'];
@@ -76,8 +69,10 @@ window.addEventListener('message', async (event) => {
   }
 });
 
-// Expose flag so the web app knows it's running in the desktop client
+// Expose flags and APIs so the web app knows it's running in the desktop client
 contextBridge.exposeInMainWorld('__PSTREAM_DESKTOP__', true);
+contextBridge.exposeInMainWorld('isDesktopApp', true); // Compatibility alias
+contextBridge.exposeInMainWorld('PSTREAM_DESKTOP', true); // Another common pattern
 
 // Expose function to open settings
 contextBridge.exposeInMainWorld('__PSTREAM_OPEN_SETTINGS__', () => {
@@ -92,6 +87,12 @@ contextBridge.exposeInMainWorld('__PSTREAM_OPEN_DEVTOOLS__', () => {
 // Expose function to trigger offline mode view
 contextBridge.exposeInMainWorld('__PSTREAM_OPEN_OFFLINE__', () => {
   ipcRenderer.invoke('openOfflineApp');
+});
+
+// Expose desktopApi for the web app to trigger downloads and open offline page
+contextBridge.exposeInMainWorld('desktopApi', {
+  startDownload: (data) => ipcRenderer.invoke('startDownload', data),
+  openOffline: () => ipcRenderer.invoke('openOfflineApp'),
 });
 
 // Expose WARP controls for the "failed to load" error page (turn on WARP, then reload)
@@ -114,7 +115,13 @@ ipcRenderer.on('download-complete', (_event, data) =>
   window.postMessage({ name: 'download-complete', body: data }, '*'),
 );
 ipcRenderer.on('download-error', (_event, data) =>
-  window.postMessage({ name: 'download-error', body: { id: data.id, error: 'Download failed. Please try again.' } }, '*'),
+  window.postMessage(
+    {
+      name: 'download-error',
+      body: { id: data.id, error: 'Download failed. Please try again.' },
+    },
+    '*',
+  ),
 );
 
 console.log('P-Stream Desktop Preload Loaded');
