@@ -28,6 +28,7 @@ const ROOT = path.join(__dirname, '..', '..');
 const PRELOAD = path.join(__dirname, '..', 'preload');
 const RENDERER = path.join(__dirname, '..', 'renderer');
 const SETTINGS = path.join(__dirname, '..', 'settings');
+const SETUP = path.join(__dirname, '..', 'setup');
 
 // Settings store (will be initialized when app is ready)
 let store = null;
@@ -168,7 +169,7 @@ function createWindow() {
   // Attach CORS bypass (extension-equivalent): add CORS headers to responses that match
   // rules registered via prepareStream IPC from the page.
   setupInterceptors(view.webContents.session, {
-    getStreamHostname: () => (store ? store.get('streamUrl', 'pstream.mov') : 'pstream.mov'),
+    getStreamHostname: () => (store ? store.get('streamUrl') : null),
   });
 
   // Allow WebAuthn passkey flows for the current origin only; allow fullscreen for the web player
@@ -343,8 +344,13 @@ function createWindow() {
     }
   });
 
-  // Get the saved stream URL or use default
-  const streamUrl = store ? store.get('streamUrl', 'pstream.mov') : 'pstream.mov';
+  // Get the saved stream URL
+  const streamUrl = store ? store.get('streamUrl') : null;
+  if (!streamUrl) {
+    mainBrowserView.webContents.loadFile(path.join(SETUP, 'setup.html'));
+    return;
+  }
+
   const fullUrl =
     streamUrl.startsWith('http://') || streamUrl.startsWith('https://') ? streamUrl : `https://${streamUrl}/`;
   view.webContents.loadURL(fullUrl);
@@ -1220,7 +1226,6 @@ app.whenReady().then(async () => {
   store = new SimpleStore({
     defaults: {
       discordRPCEnabled: true,
-      streamUrl: 'pstream.mov',
       hardwareAcceleration: true,
       warpLaunchEnabled: false,
       volumeBoost: 1.0,
@@ -1292,6 +1297,26 @@ app.whenReady().then(async () => {
     }
 
     return net.fetch(pathToFileURL(resolvedPath).href);
+  });
+
+  ipcMain.handle('save-domain', async (event, domain) => {
+    if (!store) return false;
+
+    // Basic validation
+    if (!domain || domain.trim().length === 0) {
+      throw new Error('Domain cannot be empty');
+    }
+
+    store.set('streamUrl', domain.trim());
+
+    // Load the new URL in the main view
+    const fullUrl =
+      domain.trim().startsWith('http://') || domain.trim().startsWith('https://')
+        ? domain.trim()
+        : `https://${domain.trim()}/`;
+    mainBrowserView.webContents.loadURL(fullUrl);
+
+    return true;
   });
 
   ipcMain.handle('openControlPanel', () => {
@@ -1681,8 +1706,8 @@ ipcMain.handle('get-app-version', () => {
 
 // IPC handlers for stream URL
 ipcMain.handle('get-stream-url', () => {
-  if (!store) return 'pstream.mov';
-  return store.get('streamUrl', 'pstream.mov');
+  if (!store) return null;
+  return store.get('streamUrl');
 });
 
 ipcMain.handle('set-stream-url', async (event, url) => {
@@ -1740,11 +1765,9 @@ ipcMain.handle('reset-app', async () => {
       storages: ['cookies', 'localstorage', 'sessionstorage', 'indexdb', 'websql', 'cachestorage', 'filesystem'],
     });
 
-    // Reload the BrowserView with the default URL
-    if (mainBrowserView && mainBrowserView.webContents) {
-      const defaultUrl = 'https://pstream.mov/';
-      mainBrowserView.webContents.loadURL(defaultUrl);
-    }
+    // Reload the app
+    app.relaunch();
+    app.exit();
 
     return { success: true };
   } catch (error) {
@@ -1816,7 +1839,11 @@ ipcMain.handle('set-warp-enabled', async (event, enabled) => {
 // Reload the stream page (used from the "failed to load" error page after turning on WARP)
 ipcMain.handle('reload-stream-page', () => {
   if (!mainBrowserView || !mainBrowserView.webContents) return;
-  const streamUrl = store ? store.get('streamUrl', 'pstream.mov') : 'pstream.mov';
+  const streamUrl = store ? store.get('streamUrl') : null;
+  if (!streamUrl) {
+    mainBrowserView.webContents.loadFile(path.join(SETUP, 'setup.html'));
+    return;
+  }
   const fullUrl =
     streamUrl.startsWith('http://') || streamUrl.startsWith('https://') ? streamUrl : `https://${streamUrl}/`;
   mainBrowserView.webContents.loadURL(fullUrl);

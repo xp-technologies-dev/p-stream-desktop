@@ -124,8 +124,9 @@ function clearActivitySafe() {
 }
 
 function getStreamUrlForRPC() {
-  if (!store) return 'https://pstream.mov/';
-  const streamUrl = store.get('streamUrl', 'pstream.mov');
+  if (!store) return null;
+  const streamUrl = store.get('streamUrl');
+  if (!streamUrl) return null;
   return streamUrl.startsWith('http://') || streamUrl.startsWith('https://') ? streamUrl : `https://${streamUrl}/`;
 }
 
@@ -183,6 +184,9 @@ async function setActivity(title, mediaMetadata = null) {
   }
 
   if (!mediaMetadata) {
+    const streamUrl = getStreamUrlForRPC();
+    const buttons = streamUrl ? [{ label: 'Use P-Stream', url: streamUrl }] : undefined;
+
     setActivityRaw({
       details: 'P-Stream',
       state: 'Browsing',
@@ -190,10 +194,13 @@ async function setActivity(title, mediaMetadata = null) {
       largeImageKey: 'logo',
       largeImageText: 'P-Stream',
       instance: false,
-      buttons: [{ label: 'Use P-Stream', url: getStreamUrlForRPC() }],
+      buttons,
     });
     return;
   }
+
+  const streamUrl = getStreamUrlForRPC();
+  const buttons = streamUrl ? [{ label: 'Use P-Stream', url: streamUrl }] : undefined;
 
   const activity = {
     name: getActivityNameFromMedia(mediaMetadata),
@@ -205,7 +212,7 @@ async function setActivity(title, mediaMetadata = null) {
     smallImageKey: 'logo_no_bg',
     smallImageText: 'P-Stream',
     instance: false,
-    buttons: [{ label: 'Use P-Stream', url: getStreamUrlForRPC() }],
+    buttons,
   };
 
   if (mediaMetadata.isPlaying) {

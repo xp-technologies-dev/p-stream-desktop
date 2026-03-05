@@ -89,6 +89,11 @@ contextBridge.exposeInMainWorld('__PSTREAM_OPEN_OFFLINE__', () => {
   ipcRenderer.invoke('openOfflineApp');
 });
 
+// Expose setup API for the setup page
+contextBridge.exposeInMainWorld('__PSTREAM_SETUP__', {
+  saveDomain: (domain) => ipcRenderer.invoke('save-domain', domain),
+});
+
 // Expose desktopApi for the web app to trigger downloads and open offline page
 contextBridge.exposeInMainWorld('desktopApi', {
   startDownload: (data) => ipcRenderer.invoke('startDownload', data),
